@@ -47,21 +47,24 @@ def main(config, args):
     else:
         raise NotImplementedError("cross_attention_dim must be 768 or 384")
 
+    # Optimization Change 2: Enabling caching for audio embeddings
     audio_encoder = Audio2Feature(
         model_path=whisper_model_path,
         device="cuda",
         num_frames=config.data.num_frames,
         audio_feat_length=config.data.audio_feat_length,
+        audio_embeds_cache_dir='./audio_embeds_cache' 
     )
 
     vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse", torch_dtype=dtype)
     vae.config.scaling_factor = 0.18215
     vae.config.shift_factor = 0
 
+    # Optimization Change 3: Initializing the model on the GPU (cuda)
     unet, _ = UNet3DConditionModel.from_pretrained(
         OmegaConf.to_container(config.model),
         args.inference_ckpt_path,
-        device="cpu",
+        device="cuda",
     )
 
     unet = unet.to(dtype=dtype)
@@ -72,6 +75,9 @@ def main(config, args):
         unet=unet,
         scheduler=scheduler,
     ).to("cuda")
+    
+    # Optimization Change 1: Enabling VAE slicing
+    pipeline.enable_vae_slicing()
 
     # use DeepCache
     if args.enable_deepcache:
