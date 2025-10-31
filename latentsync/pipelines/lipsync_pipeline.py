@@ -13,7 +13,7 @@ import torchvision
 from torchvision import transforms
 
 from packaging import version
-
+from concurrent.futures import ThreadPoolExecutor
 from diffusers.configuration_utils import FrozenDict
 from diffusers.models import AutoencoderKL
 from diffusers.pipelines import DiffusionPipeline
@@ -250,19 +250,23 @@ class LipsyncPipeline(DiffusionPipeline):
         return images
 
     def affine_transform_video(self, video_frames: np.ndarray):
-        faces = []
-        boxes = []
-        affine_matrices = []
+	    
+	    # Optimization Change 4: Enable parallel threads using ThreadPoolExecutor
         print(f"Affine transforming {len(video_frames)} faces...")
-        for frame in tqdm.tqdm(video_frames):
-            face, box, affine_matrix = self.image_processor.affine_transform(frame)
-            faces.append(face)
-            boxes.append(box)
-            affine_matrices.append(affine_matrix)
 
+        with ThreadPoolExecutor() as executor:
+            results = list(tqdm.tqdm(
+                executor.map(self.image_processor.affine_transform, video_frames),
+                total=len(video_frames),
+                desc="Affine Transforming"
+            ))
+
+        # Unpack results in correct order
+        faces, boxes, affine_matrices = zip(*results)
         faces = torch.stack(faces)
-        return faces, boxes, affine_matrices
 
+        return faces, boxes, affine_matrices
+	
     def restore_video(self, faces: torch.Tensor, video_frames: np.ndarray, boxes: list, affine_matrices: list):
         video_frames = video_frames[: len(faces)]
         out_frames = []
