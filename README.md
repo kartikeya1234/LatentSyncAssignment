@@ -103,6 +103,35 @@ If the download is successful, the checkpoints should appear as follows:
 
 Or you can download `latentsync_unet.pt` and `tiny.pt` manually from our [HuggingFace repo](https://huggingface.co/ByteDance/LatentSync-1.6)
 
+## ⚡ Performance Optimizations
+
+The following optimizations have been implemented to improve performance and reduce memory usage:
+
+### Inference Optimizations
+
+1. **VAE Slicing** (scripts/inference.py:79)
+   - Enables VAE slicing to reduce memory consumption during encoding/decoding, especially for lower-end GPUs
+   - Implementation: `pipeline.enable_vae_slicing()`
+
+2. **Audio Embeddings Caching** (scripts/inference.py:50)
+   - Caches audio embeddings to avoid redundant computation
+   - Configured with cache directory: `./audio_embeds_cache`
+
+3. **GPU Initialization** (scripts/inference.py:63)
+   - Initializes model directly on GPU (CUDA) to avoid unnecessary CPU-to-GPU transfers
+   - Implementation: `UNet3DConditionModel.from_pretrained(..., device="cuda")`
+
+4. **Parallel Affine Transform** (latentsync/pipelines/lipsync_pipeline.py:254)
+   - Uses `ThreadPoolExecutor` for parallel processing of video frame transformations instead of sequential transformations, cutting the transformation time by 50%
+   - Significantly speeds up batch face transformations
+
+### Inference Results
+
+1. For the demo video `demo1_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 10.6% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence remained the same at 8.27. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1xRi9BCnKuYAVYutprncaG2wefe_KuyZt/view?usp=share_link) and [here](https://drive.google.com/file/d/1h8Pqyx0rbXLsox99RZJ_r2ehoN6NZgbC/view?usp=share_link), respectively.
+2. For the demo video `demo2_video.mp4` and `demo1_video.wav`, there was reduction by 12.9% reduction in CPU time, and 10.5% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence for original code was 7.78, and the optimized version got a score of 7.80. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1-w48wbizctLj4Q_C9RGgYBDTdAjm25c3/view?usp=share_link) and [here](https://drive.google.com/file/d/1Q523SZlgSPJ27D6e9CVc21qYHS9-I30E/view?usp=share_link), respectively.
+3. For the demo video `demo3_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 11.1% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence remained the same at 8.27. The SyncNet confidence for original code was 9.02, and the optimized version got a score of 8.93. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1yIy8YIIMiIP6qjCXQnQ8P2Me0BWaE12H/view?usp=share_link) and [here](https://drive.google.com/file/d/12ykrCieoKZnKzqYrFxfwfQouZNnogQv5/view?usp=share_link), respectively. 
+
+
 ## 🚀 Inference
 
 Minimum VRAM for inference:
