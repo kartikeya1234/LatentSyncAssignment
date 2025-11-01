@@ -110,7 +110,8 @@ The following optimizations have been implemented to improve performance and red
 ### Inference Optimizations
 
 1. **VAE Slicing** (scripts/inference.py:79)
-   - Enables VAE slicing to reduce memory consumption during encoding/decoding, especially for lower-end GPUs
+   - Enables VAE slicing to reduce memory consumption during encoding/decoding
+   - Reduces inference time significantly for lower-end GPUs
    - Implementation: `pipeline.enable_vae_slicing()`
 
 2. **Audio Embeddings Caching** (scripts/inference.py:50)
@@ -122,15 +123,18 @@ The following optimizations have been implemented to improve performance and red
    - Implementation: `UNet3DConditionModel.from_pretrained(..., device="cuda")`
 
 4. **Parallel Affine Transform** (latentsync/pipelines/lipsync_pipeline.py:254)
-   - Uses `ThreadPoolExecutor` for parallel processing of video frame transformations instead of sequential transformations, cutting the transformation time by 50%
+   - Uses `ThreadPoolExecutor` for parallel processing of video frame transformations instead of sequential transformations
    - Significantly speeds up batch face transformations
+   - Faster with more cores
+   - For instance, for a video of length 1 minute with audio of length 50 seconds, the affine transformations were performed in 74 seconds in the original code, which was cut done to 34 seconds by parallel processing
+   -  The CPU utilized was a AMD Ryzen 5 7600 6-Core Processor
 
 ### Inference Results
-
-1. For the demo video `demo1_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 10.6% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence remained the same at 8.27. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1xRi9BCnKuYAVYutprncaG2wefe_KuyZt/view?usp=share_link) and [here](https://drive.google.com/file/d/1h8Pqyx0rbXLsox99RZJ_r2ehoN6NZgbC/view?usp=share_link), respectively.
-2. For the demo video `demo2_video.mp4` and `demo1_video.wav`, there was reduction by 12.9% reduction in CPU time, and 10.5% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence for original code was 7.78, and the optimized version got a score of 7.80. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1-w48wbizctLj4Q_C9RGgYBDTdAjm25c3/view?usp=share_link) and [here](https://drive.google.com/file/d/1Q523SZlgSPJ27D6e9CVc21qYHS9-I30E/view?usp=share_link), respectively.
-3. For the demo video `demo3_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 11.1% reduction in CUDA time for 15 diffusion steps. The SyncNet confidence remained the same at 8.27. The SyncNet confidence for original code was 9.02, and the optimized version got a score of 8.93. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1yIy8YIIMiIP6qjCXQnQ8P2Me0BWaE12H/view?usp=share_link) and [here](https://drive.google.com/file/d/12ykrCieoKZnKzqYrFxfwfQouZNnogQv5/view?usp=share_link), respectively. 
-
+These inferences were conducted on a AMD Ryzen 5 7600 6-Core Processor with a Nvidia RTX 3060 (12 GB VRAM) GPU: 
+1. For the demo video `demo1_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 10.6% reduction in CUDA time for 15 inference steps. The SyncNet confidence remained the same at 8.27. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1xRi9BCnKuYAVYutprncaG2wefe_KuyZt/view?usp=share_link) and [here](https://drive.google.com/file/d/1h8Pqyx0rbXLsox99RZJ_r2ehoN6NZgbC/view?usp=share_link), respectively.
+2. For the demo video `demo2_video.mp4` and `demo1_video.wav`, there was reduction by 12.9% reduction in CPU time, and 10.5% reduction in CUDA time for 15 inference steps. The SyncNet confidence for original code was 7.78, and the optimized version got a score of 7.80. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1-w48wbizctLj4Q_C9RGgYBDTdAjm25c3/view?usp=share_link) and [here](https://drive.google.com/file/d/1Q523SZlgSPJ27D6e9CVc21qYHS9-I30E/view?usp=share_link), respectively.
+3. For the demo video `demo3_video.mp4` and `demo1_video.wav`, there was reduction by 13.7% reduction in CPU time, and 11.1% reduction in CUDA time for 15 inference steps. The SyncNet confidence for original code was 9.02, and the optimized version got a score of 8.93. The profiler result for optimized code and original code are [here](https://drive.google.com/file/d/1yIy8YIIMiIP6qjCXQnQ8P2Me0BWaE12H/view?usp=share_link) and [here](https://drive.google.com/file/d/12ykrCieoKZnKzqYrFxfwfQouZNnogQv5/view?usp=share_link), respectively. 
+4. For a video and audio of length approx. 1 minute, there was an estimated reduction of approx. 20% in inference time for the optimized code, as opposed to the original one. The inference time for optimized code was 26 minutes and 38 seconds, and an estimated time of 32 minutes for the original code as it crashed due to VRAM constraints. The profiling could also not be conducted due to system RAM issues. The video and audio can be found [here](https://drive.google.com/file/d/1b5hSjj1yp8-QrXF0EPEF_pI_78YuiKPH/view?usp=share_link) and [here](https://drive.google.com/file/d/1fXIc6s3nP_HOHVc4RQ8OEZEV1Ybk4pmY/view?usp=share_link), respectively. The output lip-synced video can be found [here](https://drive.google.com/file/d/10UoB_Yf7dFQKr5YppZgLsD1T3LtlX9jH/view?usp=share_link). 
 
 ## 🚀 Inference
 
