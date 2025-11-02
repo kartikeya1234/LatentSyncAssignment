@@ -1,19 +1,6 @@
-<h1 align="center">LatentSync</h1>
+<h1 align="center">LatentSync Assignment</h1>
 
-<div align="center">
 
-[![arXiv](https://img.shields.io/badge/arXiv-Paper-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2412.09262)
-[![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/ByteDance/LatentSync-1.6)
-[![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Space-yellow)](https://huggingface.co/spaces/fffiloni/LatentSync)
-<a href="https://replicate.com/lucataco/latentsync"><img src="https://replicate.com/lucataco/latentsync/badge" alt="Replicate"></a>
-
-</div>
-
-## 🔥 Updates
-
-- `2025/06/11`: We released **LatentSync 1.6**, which is trained on 512 $\times$ 512 resolution videos to mitigate the blurriness problem. Watch the demo [here](docs/changelog_v1.6.md).
-
-- `2025/03/14`: We released **LatentSync 1.5**, which **(1)** improves temporal consistency via adding temporal layer, **(2)** improves performance on Chinese videos and **(3)** reduces the VRAM requirement of the stage2 training to **20 GB** through a series of optimizations. Learn more details [here](docs/changelog_v1.5.md).
 
 ## 📖 Introduction
 
@@ -27,54 +14,7 @@ We present *LatentSync*, an end-to-end lip-sync method based on audio-conditione
 
 LatentSync uses the [Whisper](https://github.com/openai/whisper) to convert melspectrogram into audio embeddings, which are then integrated into the U-Net via cross-attention layers. The reference and masked frames are channel-wise concatenated with noised latents as the input of U-Net. In the training process, we use a one-step method to get estimated clean latents from predicted noises, which are then decoded to obtain the estimated clean frames. The TREPA, [LPIPS](https://arxiv.org/abs/1801.03924) and [SyncNet](https://www.robots.ox.ac.uk/~vgg/publications/2016/Chung16a/chung16a.pdf) losses are added in the pixel space.
 
-## 🎬 Demo
 
-<table class="center">
-  <tr style="font-weight: bolder;text-align:center;">
-        <td width="50%"><b>Original video</b></td>
-        <td width="50%"><b>Lip-synced video</b></td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/b778e3c3-ba25-455d-bdf3-d89db0aa75f4 controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/ac791682-1541-4e6a-aa11-edd9427b977e controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/6d4f4afd-6547-428d-8484-09dc53a19ecf controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/b4723d08-c1d4-4237-8251-09c43eb77a6a controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/fb4dc4c1-cc98-43dd-a211-1ff8f843fcfa controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/7c6ca513-d068-4aa9-8a82-4dfd9063ac4e controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td width=300px>
-      <video src=https://github.com/user-attachments/assets/0756acef-2f43-4b66-90ba-6dc1d1216904 controls preload></video>
-    </td>
-    <td width=300px>
-      <video src=https://github.com/user-attachments/assets/663ff13d-d716-4a35-8faa-9dcfe955e6a5 controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/0f7f9845-68b2-4165-bd08-c7bbe01a0e52 controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/c34fe89d-0c09-4de3-8601-3d01229a69e3 controls preload></video>
-    </td>
-  </tr>
-</table>
 
 (Photorealistic videos are filmed by contracted models, and anime videos are from [VASA-1](https://www.microsoft.com/en-us/research/project/vasa-1/))
 
@@ -111,6 +51,7 @@ The following optimizations have been implemented to improve performance and red
 
 1. **VAE Slicing** (scripts/inference.py:79)
    - Enables VAE slicing to reduce memory consumption during encoding/decoding
+   - Comes at the cost of increased number of GPU calls, but with low GPU computation time
    - Reduces inference time significantly for lower-end GPUs
    - Implementation: `pipeline.enable_vae_slicing()`
 
@@ -126,8 +67,7 @@ The following optimizations have been implemented to improve performance and red
    - Uses `ThreadPoolExecutor` for parallel processing of video frame transformations instead of sequential transformations
    - Significantly speeds up batch face transformations
    - Faster with more cores
-   - For instance, for a video of length 1 minute with audio of length 50 seconds, the affine transformations were performed in 74 seconds in the original code, which was cut done to 34 seconds by parallel processing
-   -  The CPU utilized was a AMD Ryzen 5 7600 6-Core Processor
+   - For instance, for a video of length 1 minute with audio of length 50 seconds, the affine transformations were performed in 74 seconds in the original code, which was cut done to 34 seconds by parallel processing in the optimized code
 
 ### Inference Results
 These inferences were conducted on a AMD Ryzen 5 7600 6-Core Processor with a Nvidia RTX 3060 (12 GB VRAM) GPU: 
