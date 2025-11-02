@@ -49,21 +49,21 @@ The following optimizations have been implemented to improve performance and red
 
 ### Inference Optimizations
 
-1. **VAE Slicing** (scripts/inference.py:79)
+1. **VAE Slicing** (scripts/inference.py:90)
    - Enables VAE slicing to reduce memory consumption during encoding/decoding
    - Comes at the cost of increased number of GPU calls, but with low GPU computation time
    - Reduces inference time significantly for lower-end GPUs
    - Implementation: `pipeline.enable_vae_slicing()`
 
-2. **Audio Embeddings Caching** (scripts/inference.py:50)
+2. **Audio Embeddings Caching** (scripts/inference.py:51)
    - Caches audio embeddings to avoid redundant computation
    - Configured with cache directory: `./audio_embeds_cache`
 
-3. **GPU Initialization** (scripts/inference.py:63)
+3. **GPU Initialization** (scripts/inference.py:73)
    - Initializes model directly on GPU (CUDA) to avoid unnecessary CPU-to-GPU transfers
    - Implementation: `UNet3DConditionModel.from_pretrained(..., device="cuda")`
 
-4. **Parallel Affine Transform** (latentsync/pipelines/lipsync_pipeline.py:254)
+4. **Parallel Affine Transform** (latentsync/pipelines/lipsync_pipeline.py:368)
    - Uses `ThreadPoolExecutor` for parallel processing of video frame transformations instead of sequential transformations
    - Significantly speeds up batch face transformations
    - Faster with more cores
