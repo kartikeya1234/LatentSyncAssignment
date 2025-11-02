@@ -34,6 +34,7 @@ from ..models.unet import UNet3DConditionModel
 from ..utils.util import read_video, read_audio, write_video, check_ffmpeg_installed
 from ..utils.image_processor import ImageProcessor, load_fixed_mask
 from ..whisper.audio2feature import Audio2Feature
+from ..whisper.whisper.dual_audio_encoder import Wav2Vec2Encoder
 import tqdm
 import soundfile as sf
 
@@ -47,6 +48,7 @@ class LipsyncPipeline(DiffusionPipeline):
         self,
         vae: AutoencoderKL,
         audio_encoder: Audio2Feature,
+        wav2vec2_encoder: Wav2Vec2Encoder,
         unet: UNet3DConditionModel,
         scheduler: Union[
             DDIMScheduler,
@@ -117,6 +119,118 @@ class LipsyncPipeline(DiffusionPipeline):
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
         self.set_progress_bar_config(desc="Steps")
+
+    def _create_wav2vec2_chunks(self, wav2vec2_50fps, num_video_frames, fps=25):
+        chunks = []
+        wav2vec2_idx_multiplier = 50.0 / fps
+        
+        for vid_idx in range(num_video_frames):
+            center_idx = int(vid_idx * wav2vec2_idx_multiplier)
+            # Select 50 frames directly (25 before, 25 after)
+            left_idx = center_idx - 25
+            right_idx = center_idx + 25
+            
+            selected_features = []
+            for idx in range(left_idx, right_idx):
+                clamped_idx = max(0, min(idx, len(wav2vec2_50fps) - 1))
+                selected_features.append(wav2vec2_50fps[clamped_idx])
+            
+            chunk = torch.stack(selected_features)  # (50, 128)
+            chunks.append(chunk)
+        
+        return chunks
+
+    def _interpolate_features(self, features, target_length):
+        
+        if features.shape[0] == target_length:
+            return features
+        
+        features = features.permute(1, 0).unsqueeze(0)
+        
+        interpolated = F.interpolate(
+            features,
+            size=target_length,
+            mode='linear',
+            align_corners=False
+        )
+        
+        interpolated = interpolated.squeeze(0).permute(1, 0)
+        
+        return interpolated
+
+    def extract_dual_audio_features(self, audio_path, video_fps=25):
+        """
+        Extract combined Whisper + Wav2Vec2 features with temporal windows
+        """
+        print("\n" + "="*60)
+        print("Extracting Dual Audio Features")
+        print("="*60)
+        
+        print("Step 1: Extracting Whisper semantic features...")
+        whisper_feature = self.audio_encoder.audio2feat(audio_path)
+        print(f"Whisper raw features: {whisper_feature.shape}")
+        
+        whisper_chunks = self.audio_encoder.feature2chunks(
+            feature_array=whisper_feature, 
+            fps=video_fps
+        )
+        print(f"Whisper chunks: {len(whisper_chunks)} chunks")
+        print(f"Each chunk shape: {whisper_chunks[0].shape}")
+        
+        # 2. Extract Wav2Vec2 features (phonetic)
+        print("\nStep 2: Extracting Wav2Vec2 phonetic features...")
+        wav2vec2_features, audio_length = self.wav2vec2_encoder(audio_path)
+        print(f"Wav2Vec2 features: {wav2vec2_features.shape}")
+        print(f"Audio length: {audio_length / 16000:.2f}s")
+        
+        # 3. Align Wav2Vec2 to Whisper's 50 FPS
+        print("\nStep 3: Aligning Wav2Vec2 to 50 FPS...")
+        # Whisper operates at 50 FPS, so we need to match that
+        whisper_50fps_length = len(whisper_feature)
+        print(f"Whisper @ 50 FPS length: {whisper_50fps_length}")
+        
+        wav2vec2_50fps = self._interpolate_features(
+            wav2vec2_features, 
+            whisper_50fps_length
+        )
+        print(f"Wav2Vec2 @ 50 FPS: {wav2vec2_50fps.shape}")
+        
+        print("\nStep 4: Creating Wav2Vec2 temporal windows...")
+        wav2vec2_chunks = self._create_wav2vec2_chunks(
+            wav2vec2_50fps, 
+            num_video_frames=len(whisper_chunks),
+            fps=video_fps
+        )
+        print(f"Wav2Vec2 chunks: {len(wav2vec2_chunks)} chunks")
+        print(f"Each chunk shape: {wav2vec2_chunks[0].shape}")
+        
+        # 5. Concatenate Whisper and Wav2Vec2 for each video frame
+        print("\nStep 5: Fusing Whisper + Wav2Vec2...")
+        combined_chunks = []
+        for i, (whisper_chunk, wav2vec2_chunk) in enumerate(zip(whisper_chunks, wav2vec2_chunks)):
+            # whisper_chunk: (50, 384)
+            # wav2vec2_chunk: (50, 128)
+            # combined: (50, 512)
+            wav2vec2_chunk = wav2vec2_chunk.to(whisper_chunk.device)
+            
+            combined = torch.cat([whisper_chunk, wav2vec2_chunk], dim=-1)
+            combined_chunks.append(combined)
+        
+        print(f"Combined chunks: {len(combined_chunks)}")
+        print(f"Each chunk shape: {combined_chunks[0].shape}")
+        print(f"Feature breakdown per time step:")
+        print(f"Whisper (semantic): 384 dims")
+        print(f"Wav2Vec2 (phonetic): 128 dims")
+        print(f"Total: 512 dims")
+        
+        print("="*60)
+        print(f"Dual audio feature extraction complete!")
+        print(f"Total video frames: {len(combined_chunks)}")
+        print(f"Temporal context per frame: 50 audio steps")
+        print(f"Feature dimension: 512")
+        print("="*60 + "\n")
+        
+        return combined_chunks
 
     def enable_vae_slicing(self):
         self.vae.enable_slicing()
@@ -365,8 +479,10 @@ class LipsyncPipeline(DiffusionPipeline):
         # 4. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
-        whisper_feature = self.audio_encoder.audio2feat(audio_path)
-        whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
+        # Implementation of Dual Audio Encoder feature extraction
+        combined_chunks = self.extract_dual_audio_features(audio_path, video_fps=video_fps)
+        #whisper_feature = self.audio_encoder.audio2feat(audio_path)
+        #whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
 
         audio_samples = read_audio(audio_path)
         video_frames = read_video(video_path, use_decord=False)

@@ -19,6 +19,7 @@ import torch
 from diffusers import AutoencoderKL, DDIMScheduler
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
+from latentsync.whisper.whisper.dual_audio_encoder import load_wav2vec2_encoder
 from accelerate.utils import set_seed
 from latentsync.whisper.audio2feature import Audio2Feature
 from DeepCache import DeepCacheSDHelper
@@ -56,6 +57,15 @@ def main(config, args):
         audio_embeds_cache_dir='./audio_embeds_cache' 
     )
 
+    # Implementation of Dual Audio Encoder (Wav2Vec2)
+    wav2vec2_encoder = load_wav2vec2_encoder(
+            model_name="facebook/wav2vec2-lv-60-espeak-cv-ft",
+            target_dim=128,
+            cache_dir="./checkpoints/wav2vec2",
+            device='cuda',
+            dtype=dtype
+        )
+
     vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse", torch_dtype=dtype)
     vae.config.scaling_factor = 0.18215
     vae.config.shift_factor = 0
@@ -72,6 +82,7 @@ def main(config, args):
     pipeline = LipsyncPipeline(
         vae=vae,
         audio_encoder=audio_encoder,
+        wav2vec2_encoder=wav2vec2_encoder,
         unet=unet,
         scheduler=scheduler,
     ).to("cuda")
