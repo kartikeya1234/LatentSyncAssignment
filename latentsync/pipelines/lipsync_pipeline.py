@@ -9,6 +9,7 @@ import subprocess
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torchvision
 from torchvision import transforms
 
@@ -112,6 +113,7 @@ class LipsyncPipeline(DiffusionPipeline):
         self.register_modules(
             vae=vae,
             audio_encoder=audio_encoder,
+            wav2vec2_encoder=wav2vec2_encoder,
             unet=unet,
             scheduler=scheduler,
         )
@@ -487,7 +489,7 @@ class LipsyncPipeline(DiffusionPipeline):
         audio_samples = read_audio(audio_path)
         video_frames = read_video(video_path, use_decord=False)
 
-        video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks, video_frames)
+        video_frames, faces, boxes, affine_matrices = self.loop_video(combined_chunks, video_frames)
 
         synced_video_frames = []
 
@@ -495,7 +497,7 @@ class LipsyncPipeline(DiffusionPipeline):
 
         # Prepare latent variables
         all_latents = self.prepare_latents(
-            len(whisper_chunks),
+            len(combined_chunks),
             num_channels_latents,
             height,
             width,
@@ -504,10 +506,10 @@ class LipsyncPipeline(DiffusionPipeline):
             generator,
         )
 
-        num_inferences = math.ceil(len(whisper_chunks) / num_frames)
+        num_inferences = math.ceil(len(combined_chunks) / num_frames)
         for i in tqdm.tqdm(range(num_inferences), desc="Doing inference..."):
             if self.unet.add_audio_layer:
-                audio_embeds = torch.stack(whisper_chunks[i * num_frames : (i + 1) * num_frames])
+                audio_embeds = torch.stack(combined_chunks[i * num_frames : (i + 1) * num_frames])
                 audio_embeds = audio_embeds.to(device, dtype=weight_dtype)
                 if do_classifier_free_guidance:
                     null_audio_embeds = torch.zeros_like(audio_embeds)
